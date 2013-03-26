@@ -1,0 +1,8 @@
+.*.swp
+.cache
+.classpath
+.idea/
+.idea_modules/
+.project
+.worksheet
+target/

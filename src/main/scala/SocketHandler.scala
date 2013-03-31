@@ -1,11 +1,3 @@
-import akka.actor.{ActorRef, Actor}
-import akka.event.Logging
-import akka.io.UdpConn.{Received, Send, Connected, Connect}
-import akka.io.{UdpConn, IO}
-import akka.util.ByteString
-import concurrent.duration.FiniteDuration
-import java.net.InetSocketAddress
-
 /*
  * Copyright (c) 2013 Scott Abernethy.
  *
@@ -22,153 +14,121 @@ import java.net.InetSocketAddress
  * limitations under the License.
  */
 
-case class Target(address: String, port: Int)
+import akka.actor.{ActorRef, Actor}
+import akka.event.Logging
+import akka.io.UdpConn.{Received, Send, Connected, Connect}
+import akka.io.{UdpConn, IO}
+import akka.util.ByteString
+import java.net.InetSocketAddress
+import scala.concurrent.duration.FiniteDuration
 
-class SocketHandler extends Actor {
+/**
+ * Timeouts are 1-10 seconds?
+ * Is Timeout target dependent, or request dependent, or both?
+ * Resizing packets is target dependent ... as they could be on different networks.
+ */
+class SocketHandler extends Actor with TargetState {
   val log = Logging(context.system, this)
   var target: Option[Target] = None
   var conn: ActorRef = context.system.deadLetters
-  var requestId: Int = 0
+  var requester: ActorRef = context.system.deadLetters
+
+  override def preStart() {
+    super.preStart
+    context.system.scheduler.schedule(FiniteDuration(1, "sec"), FiniteDuration(1, "sec"), self, 'Check)(context.dispatcher)
+  }
+  
   def receive = {
     case msg @ Target(address, port) => {
       target = Some(msg)
       implicit val actorSystem = context.system
       IO(UdpConn) ! Connect(self, new InetSocketAddress(address, port))
     }
+    case ref: ActorRef => {
+      requester = ref
+    }
     case Connected => {
       log.info("Connected to {}", target)
       conn = sender
     }
-    case 'Test => {
-      val community = "terminal"
-
+    case GetRequest(_, community, oids) => {
+      val requestId = nextId
+      
       implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
 
       val frame = ByteString.newBuilder
       frame ++= Ber.version2c
-      frame ++= Ber.tlvs(BerIdentifier.OctetString, ByteString(community.toList.map(_.toByte) : _*))
+      frame ++= Ber.tlvs(BerIdentifier.OctetString, ByteString(OctetString.create(community).bytes : _*))
 
       val pdu = ByteString.newBuilder
-      pdu ++= (Ber.tlv(BerIdentifier.Integer, requestId.toByte))
-      requestId += 1
+      pdu ++= (Ber.tlvs(BerIdentifier.Integer, Ber.int(requestId)))
 
       pdu ++= Ber.noErrorStatusAndIndex
 
       pdu ++= Ber.tlvs(BerIdentifier.Sequence, {
-        Ber.tlvs(BerIdentifier.Sequence, {
-          Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(List(1,3,6,1,4,1,2509,8,7,2,1,0))) ++
-            Ber.tlvs(BerIdentifier.Null, ByteString.empty)
-        }) ++
+        oids.map{ id =>
           Ber.tlvs(BerIdentifier.Sequence, {
-            Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(List(1,3,6,1,4,1,2509,8,7,2,2,0))) ++
-              Ber.tlvs(BerIdentifier.Null, ByteString.empty)
-          }) ++
-          Ber.tlvs(BerIdentifier.Sequence, {
-            Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(List(1,3,6,1,2,1,1,3,0))) ++
+            Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(id.toList)) ++
               Ber.tlvs(BerIdentifier.Null, ByteString.empty)
           })
+        }.reduce(_ ++ _)
       })
 
       val pduBytes = pdu.result
 
       frame ++= Ber.tlvs(PduType.GetRequest, pduBytes)
-      //.1.3.6.1.2.1.1.3.0  sys uptime
-      //.1.3.6.1.2.1.1.5.0  sys name
-      //.1.3.6.1.2.1.1.6.0  sys location
-      //.1.3.6.1.4.1.2509.8.21.2.1.0  last change index
-      //1.3.6.1.4.1.2509.8.7.2.1 site name
-      //1.3.6.1.4.1.2509.8.7.2.2 radio name
 
       val msg = Ber.tlvs(BerIdentifier.Sequence, frame.result)
 
-      log.info("Sending")
+      log.info("Sending {}", requestId)
       conn ! Send(msg)
+      waitOn(requestId, msg, System.currentTimeMillis)
     }
     case Received(data) => {
       implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
 
       val in = data.iterator
-      log.info("Received {}", BerDecode.getTlv(in))
-      /*in.getByte
-      val length = BerDecode.getDefiniteLength(in)
-      println("length " + length)
-      val version = BerDecode.getTlv(in)
-      println("version " + version)
-      val community = BerDecode.getTlv(in) // TODO should just skip this, instead of decoding
-      println("community " + community)
-      val pduType = BerDecode.getInt(1, in)
-      println("pdu type " + pduType)
-      val pduLength = BerDecode.getDefiniteLength(in)
-      println("pdu length " + pduLength)
-      val requestId = BerDecode.getTlv(in)
-      println("requestId " + requestId)
-      val errorStatus = BerDecode.getTlv(in)
-      println("errorStatus " + errorStatus)
-      val errorIndex = BerDecode.getTlv(in)
-      println("errorIndex " + errorIndex)
-      val remains = BerDecode.getTlv(in)
-      println("remains " + remains)
-      */
-      // seq
-      // len
-      //   int
-      //   1
-      //   version
-      //   octetstring -- skip
-      //   len -- skip
-      //   community -- skip
-      //   pdutype
-      //   len
-      //     int
-      //     len
-      //     requestId
-      //     int
-      //     len
-      //     error status
-      //     int
-      //     len
-      //     error index
-      //     seq
-      //     len
-      //       seq
-      //       len
-      //         oid
-      //         len
-      //         oid value
-      //         type
-      //         len
-      //         value
-      //       ...
+      val decoded = BerDecode.getTlv(in)
 
-
-      /*val FrameDecoder = for {
-        frameLenBytes <- akka.actor.IO.take(4)
-		frameLen = frameLenBytes.iterator.getInt
-		frame <- akka.actor.IO.take(frameLen)
-      } yield {
-		val in = frame.iterator
-
-		val n = in.getInt
-		val m = in.getInt
-
-		val a = Array.newBuilder[Short]
-		val b = Array.newBuilder[Long]
-
-		for (i <- 1 to n) {
-		  a += in.getShort
-		  b += in.getInt
-		}
-
-		val data = Array.ofDim[Double](m)
-		in.getDoubles(data)
-
-		(a.result, b.result, data)
+      decoded match {
+        case SnmpV2Msg(community, pduType, requestId, errorStatus, errorIndex, varbinds) => {
+//          for (requester <- requests.get(requestId)) {
+//            log.info("Response to {} of {}", requestId, varbinds)
+//          }
+//          requests = requests - requestId
+          requester ! (community, pduType, requestId, errorStatus, errorIndex, varbinds)
+          cancel(requestId)          
+        }
+        case _ => {
+          log.warning("Can't fathom {}", decoded)
+        }
       }
-      FrameDecoder(data)*/
+
+      //List(1, terminal, (GetResponse,List(1, 0, 0, List(List(List(1, 3, 6, 1, 4, 1, 2509, 8, 7, 2, 2, 0), INUe 204), List(List(1, 3, 6, 1, 4, 1, 2509, 8, 7, 2, 1, 0), Downstairs NMS Equipment Room), List(List(1, 3, 6, 1, 2, 1, 1, 3, 0), 112943164)))))
+    }
+    case 'Check => {
+      timeouts(System.currentTimeMillis).foreach{
+        case RequestRetry(id, payload) => {
+          log.info("Retry for request {} on {}", id, target)
+          conn ! Send(payload)
+        }
+        case RequestTimeout(id) => {
+          log.warning("Timeout for request {} on {}", id, target)
+        }
+      }
     }
     case other => {
       log.warning("Unhandled {} for {}", other, target)
       unhandled(other)
+    }
+  }
+
+  object SnmpV2Msg {
+    def unapply(in: Any): Option[(String, Byte, Int, Int, Int, Any)] = {
+      in match {
+        case List(1, community: String, (pduType: Byte, List(requestId: Int, errorStatus: Int, errorIndex: Int, varbinds))) => Some(community, pduType, requestId, errorStatus, errorIndex, varbinds)
+        case _ => None
+      }
     }
   }
 }

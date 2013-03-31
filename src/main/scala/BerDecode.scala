@@ -42,14 +42,14 @@ object BerDecode {
         val length = getDefiniteLength(in)
         val content = Array.ofDim[Byte](length)
         in.getBytes(content)
-        content.toList
+        new ObjectIdentifier(getObjectId(content.toList))
       }
       case PduType.GetResponse => {
         val length = getDefiniteLength(in)
         val content = Array.ofDim[Byte](length)
         in.getBytes(content)
         val seq = ByteString(content)
-        ("GetResponse", getSeqOfTlv(seq.iterator))
+        (PduType.GetResponse, getSeqOfTlv(seq.iterator))
       }
       case _ => null
     }
@@ -98,7 +98,51 @@ object BerDecode {
     val cs = for (i <- List.range(0, length)) yield in.getByte.toChar
     cs.mkString
   }
-  
+
+  def getObjectId(bytes: List[Byte]): List[Int] = {
+    bytes match {
+      case Snmp.IsoOrg :: tail => {
+        1 :: 3 :: getListOfOverflowingInt(tail, Nil)
+      }
+      case _ => {
+        throw new IllegalArgumentException("Todo")
+      }
+    }
+  }
+
+  def getListOfOverflowingInt(bytes: List[Byte], overflow: List[Int]): List[Int] = {
+    def sumValue(lsb: Int, msbs: List[Int]) = {
+      lsb + List.range(0, msbs.size).
+        map( i => msbs(i) << ((i + 1) * 7)).
+        fold(0)(_ + _)
+    }
+    bytes match {
+      case IncompleteOverflowingInt(value) :: xs => {
+        getListOfOverflowingInt(xs, value :: overflow)
+      }
+      case CompleteOverflowingInt(value) :: xs => {
+        sumValue(value, overflow) :: getListOfOverflowingInt(xs, Nil)
+      }
+      case _ => {
+        Nil
+      }
+    }
+  }
+
+  object IncompleteOverflowingInt {
+    def unapply(byte: Byte): Option[Int] = {
+      Some(byte).filter(b => (b & msb) == msb).map(_ ^ msb)
+    }
+  }
+
+  object CompleteOverflowingInt {
+    def unapply(byte: Byte): Option[Int] = {
+      Some(byte).filter(b => (b & msb) != msb).map(_.toInt)
+    }
+  }
+
+  // TODO tidy up mess of list bytes or bytestring or array or iterator .. use same everywhere.
+
   // decode a seq as a list of objects... that have type and value.
   
 }

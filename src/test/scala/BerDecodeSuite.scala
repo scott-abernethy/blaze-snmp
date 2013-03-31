@@ -84,4 +84,27 @@ class BerDecodeSuite extends FunSuite with ShouldMatchers {
     BerDecode.getSeqOfTlv(bs.result.iterator) should equal(List(435, "(none)", 54))
   }
 
+  test("get simple object id") {
+    val a = Array.newBuilder[Byte]
+    a += Snmp.IsoOrg
+    a += 0x01.toByte
+    a += 0x09.toByte
+    a += 0x2b.toByte
+    a += 0x09.toByte
+    a += 127.toByte
+    a += 0x01.toByte
+    a += 0x00.toByte
+    BerDecode.getObjectId(a.result.toList) should equal(List(1,3,1,9,43,9,127,1,0))
+  }
+
+  test("get object id including overflow int") {
+    val a = Array.newBuilder[Byte]
+    a += Snmp.IsoOrg
+    a += 0x01.toByte
+    a += 0x93.toByte
+    a += 0x4d.toByte
+    a += 0x09.toByte
+    BerDecode.getObjectId(a.result.toList) should equal(List(1,3,1,2509,9))
+  }
+
 }

@@ -65,7 +65,7 @@ object Ber {
     oid match {
       case 1 :: 3 :: tail => {
         val bs = ByteString.newBuilder
-        bs.putByte(0x2b)
+        bs.putByte(Snmp.IsoOrg)
         for (i <- tail) {
           bs ++= overflowingInt(i)
         }
@@ -75,6 +75,36 @@ object Ber {
         throw new IllegalArgumentException("Todo")
       }
     }
+  }
+  
+  def int(value: Int): ByteString =
+  {
+    // Taken from SNMP4J
+    var integer = value
+    var intsize = 4
+
+    /*
+     * Truncate "unnecessary" bytes off of the most significant end of this
+     * 2's complement integer.  There should be no sequence of 9
+     * consecutive 1's or 0's at the most significant end of the
+     * integer.
+     */
+    var mask = 0x1FF << ((8 * 3) - 1)
+    /* mask is 0xFF800000 on a big-endian machine */
+    while((((integer & mask) == 0) || ((integer & mask) == mask))
+          && intsize > 1){
+      intsize = intsize - 1
+      integer = integer << 8
+    }
+    mask = 0xFF << (8 * 3)
+    /* mask is 0xFF000000 on a big-endian machine */
+    val bs = ByteString.newBuilder
+    while (intsize > 0){
+      bs.putByte(((integer & mask) >> (8 * 3)).toByte)
+      integer = integer << 8
+      intsize = intsize - 1
+    }
+    bs.result
   }
 
   def overflowingInt(value: Int): List[Byte] = {
@@ -143,4 +173,8 @@ object BerIdentifier {
   val ObjectId: Byte = 0x6
   val Sequence: Byte = 0x30
   val TimeTicks: Byte = 0x43
+}
+
+object Snmp {
+  val IsoOrg: Byte = 0x2b.toByte
 }

@@ -34,35 +34,39 @@ object SnmpMessageProtocol {
   
 }
 
+/**
+ * What will the soak test do? Write it in Java, using this lib, and the SNMP4J lib in pv-base. Get and get next a bunch of objects from 1000s of radios, using 100s of threads. Record perf stats.
+ */
 class SoakActor extends Actor {
   val log = Logging(context.system, this)
+  val handler = context.actorOf(Props[RequestHandler], "RequestHandler")
+  val targets = List(
+    "10.16.10.77",
+    "10.16.10.86",
+//    "10.16.10.87",
+//    "10.16.10.101",
+//    "10.16.10.102",
+//    "10.16.10.103",
+//    "10.16.10.104",
+//    "10.16.10.199",
+//    "10.16.10.202",
+//    "10.16.10.203",
+    "10.16.10.204"
+  )
   override def receive = {
     case 'Start => {
-      createSocket(Target("10.16.10.77", 161))
-      createSocket(Target("10.16.10.86", 161))
-      createSocket(Target("10.16.10.87", 161))
-      createSocket(Target("10.16.10.101", 161))
-      createSocket(Target("10.16.10.102", 161))
-      createSocket(Target("10.16.10.103", 161))
-      createSocket(Target("10.16.10.104", 161))
-      createSocket(Target("10.16.10.199", 161))
-      createSocket(Target("10.16.10.202", 161))
-      createSocket(Target("10.16.10.203", 161))
-      createSocket(Target("10.16.10.204", 161))
-
-      context.system.scheduler.schedule(FiniteDuration(1, "sec"), FiniteDuration(100, "sec"), self, 'Soak)(context.dispatcher)
+      context.system.scheduler.schedule(FiniteDuration(1, "sec"), FiniteDuration(30, "sec"), self, 'Soak)(context.dispatcher)
     }
     case 'Soak => {
-      for (socket <- context.children) socket ! 'Test
+      for (t <- targets) handler ! GetRequest(Target(t, 161), "terminal", List(
+        ObjectIdentifier.RadioName,
+        ObjectIdentifier.SiteName,
+        ObjectIdentifier.SysUpTime
+      ))
     }
     case other => {
       log.warning("Unhandled {}", other)
       unhandled(other)
     }
-  }
-
-  def createSocket (target: Target){
-    val socket = context.actorOf(Props[SocketHandler], target.address)
-    socket ! target
   }
 }

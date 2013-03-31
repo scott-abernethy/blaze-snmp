@@ -73,4 +73,15 @@ Example: L = 435 can be encoded as
     overflowingInt(2509) should equal(List(0x93.toByte, 0x4d.toByte))
     overflowingInt(30000) should equal(List(0x81.toByte, 0xea.toByte, 0x30.toByte)) // 111010100110000 -> 10000001, 11101010, 00110000
   }
+
+  test("encode int") {
+    int(1) should equal(List(1.toByte))
+    int(15) should equal(List(15.toByte))
+    int(127) should equal(List(127.toByte))
+    int(128) should equal(List(0.toByte, 128.toByte))
+    int(130) should equal(List(0.toByte, 130.toByte))
+    int(255) should equal(List(0.toByte, 255.toByte))
+    int(256) should equal(List(1.toByte, 0.toByte))
+    int(-129) should equal(List(0xff.toByte, 0x7f.toByte))
+  }
 }

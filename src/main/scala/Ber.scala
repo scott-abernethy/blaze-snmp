@@ -174,7 +174,3 @@ object BerIdentifier {
   val Sequence: Byte = 0x30
   val TimeTicks: Byte = 0x43
 }
-
-object Snmp {
-  val IsoOrg: Byte = 0x2b.toByte
-}

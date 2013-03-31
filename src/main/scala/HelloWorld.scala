@@ -39,7 +39,7 @@ object SnmpMessageProtocol {
  */
 class SoakActor extends Actor {
   val log = Logging(context.system, this)
-  val handler = context.actorOf(Props[RequestHandler], "RequestHandler")
+  val handler = context.system.actorOf(Props[RequestHandler], "RequestHandler")
   val targets = List(
     "10.16.10.77",
     "10.16.10.86",

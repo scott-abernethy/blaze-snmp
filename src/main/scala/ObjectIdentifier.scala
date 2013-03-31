@@ -16,7 +16,7 @@ import util.Try
  * limitations under the License.
  */
 
-class ObjectIdentifier(ids: List[Int]) {
+case class ObjectIdentifier(ids: List[Int]) {
   def toList(): List[Int] = ids
 
   override def toString(): String = {

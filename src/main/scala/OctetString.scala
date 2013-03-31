@@ -14,8 +14,10 @@
  * limitations under the License.
  */
 
-class OctetString(val bytes: List[Byte]) {
-  override def toString(): String = bytes.toList.mkString
+case class OctetString(val bytes: List[Byte]) {
+  override def toString(): String = bytes.map(_.toChar).mkString
+
+
 }
 
 object OctetString {

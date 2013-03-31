@@ -25,7 +25,7 @@ object BerDecode {
       }
       case BerIdentifier.TimeTicks => {
         val length = getDefiniteLength(in)
-        getInt(length, in)
+        new TimeTicks(getInt(length, in))
       }
       case BerIdentifier.OctetString => {
         val length = getDefiniteLength(in)
@@ -91,12 +91,12 @@ object BerDecode {
     parts.foldRight(0)(_ + _)
   }
   
-  def getOctetString(length: Int, in: ByteIterator): String = {
+  def getOctetString(length: Int, in: ByteIterator): OctetString = {
     // TODO check bounds?
     //val s: String = in.take(length).toList.map(b => b.toChar).mkString
     //s
-    val cs = for (i <- List.range(0, length)) yield in.getByte.toChar
-    cs.mkString
+    val cs = for (i <- List.range(0, length)) yield in.getByte
+    new OctetString(cs)
   }
 
   def getObjectId(bytes: List[Byte]): List[Int] = {

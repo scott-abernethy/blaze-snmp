@@ -61,7 +61,7 @@ class BerDecodeSuite extends FunSuite with ShouldMatchers {
     bs.putByte(0x6e.toByte)
     bs.putByte(0x65.toByte)
     bs.putByte(0x29.toByte)
-    BerDecode.getTlv(bs.result.iterator) should equal("(none)")
+    BerDecode.getTlv(bs.result.iterator) should equal(OctetString.create("(none)"))
   }
   
   test("get seq of tlv") {
@@ -81,7 +81,7 @@ class BerDecodeSuite extends FunSuite with ShouldMatchers {
     bs.putByte(BerIdentifier.Integer)
     bs.putByte(1.toByte)
     bs.putByte(54.toByte)
-    BerDecode.getSeqOfTlv(bs.result.iterator) should equal(List(435, "(none)", 54))
+    BerDecode.getSeqOfTlv(bs.result.iterator) should equal(List(435, OctetString.create("(none)"), 54))
   }
 
   test("get simple object id") {

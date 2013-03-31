@@ -16,11 +16,12 @@
 
 import akka.actor.{ActorRef, Actor}
 import akka.event.Logging
-import akka.io.UdpConn.{Received, Send, Connected, Connect}
-import akka.io.{UdpConn, IO}
+import akka.io.UdpFF.{NoAck, Send}
 import akka.util.ByteString
-import java.net.InetSocketAddress
+import java.net.{InetSocketAddress}
 import scala.concurrent.duration.FiniteDuration
+
+case class SocketConfig(connection: ActorRef, remoteAddress: InetSocketAddress)
 
 /**
  * Timeouts are 1-10 seconds?
@@ -29,7 +30,7 @@ import scala.concurrent.duration.FiniteDuration
  */
 class SocketHandler extends Actor with TargetState {
   val log = Logging(context.system, this)
-  var target: Option[Target] = None
+  var target: Option[InetSocketAddress] = None
   var conn: ActorRef = context.system.deadLetters
   var requester: ActorRef = context.system.deadLetters
 
@@ -39,17 +40,12 @@ class SocketHandler extends Actor with TargetState {
   }
   
   def receive = {
-    case msg @ Target(address, port) => {
-      target = Some(msg)
-      implicit val actorSystem = context.system
-      IO(UdpConn) ! Connect(self, new InetSocketAddress(address, port))
+    case SocketConfig(ref, address) => {
+      target = Some(address)
+      conn = ref
     }
     case ref: ActorRef => {
       requester = ref
-    }
-    case Connected => {
-      log.info("Connected to {}", target)
-      conn = sender
     }
     case GetRequest(_, community, oids) => {
       val requestId = nextId
@@ -81,10 +77,10 @@ class SocketHandler extends Actor with TargetState {
       val msg = Ber.tlvs(BerIdentifier.Sequence, frame.result)
 
       log.info("Sending {}", requestId)
-      conn ! Send(msg)
+      send(msg)
       waitOn(requestId, msg, System.currentTimeMillis)
     }
-    case Received(data) => {
+    case ResponsePayload(data) => {
       implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
 
       val in = data.iterator
@@ -103,14 +99,12 @@ class SocketHandler extends Actor with TargetState {
           log.warning("Can't fathom {}", decoded)
         }
       }
-
-      //List(1, terminal, (GetResponse,List(1, 0, 0, List(List(List(1, 3, 6, 1, 4, 1, 2509, 8, 7, 2, 2, 0), INUe 204), List(List(1, 3, 6, 1, 4, 1, 2509, 8, 7, 2, 1, 0), Downstairs NMS Equipment Room), List(List(1, 3, 6, 1, 2, 1, 1, 3, 0), 112943164)))))
     }
     case 'Check => {
       timeouts(System.currentTimeMillis).foreach{
         case RequestRetry(id, payload) => {
           log.info("Retry for request {} on {}", id, target)
-          conn ! Send(payload)
+          send(payload)
         }
         case RequestTimeout(id) => {
           log.warning("Timeout for request {} on {}", id, target)
@@ -123,12 +117,13 @@ class SocketHandler extends Actor with TargetState {
     }
   }
 
-  object SnmpV2Msg {
-    def unapply(in: Any): Option[(String, Byte, Int, Int, Int, Any)] = {
-      in match {
-        case List(1, community: String, (pduType: Byte, List(requestId: Int, errorStatus: Int, errorIndex: Int, varbinds))) => Some(community, pduType, requestId, errorStatus, errorIndex, varbinds)
-        case _ => None
-      }
-    }
+  def send(payload: ByteString) {
+    for (to <- target) conn ! Send(payload, to, NoAck)
+  }
+}
+
+object SocketHandler {
+  def name(address: InetSocketAddress): String = {
+    address.getAddress.getHostAddress + ":" + address.getPort
   }
 }

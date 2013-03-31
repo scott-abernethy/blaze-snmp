@@ -16,6 +16,7 @@
 
 import akka.actor.{Props, ActorRef, Actor}
 import akka.event.Logging
+import java.net.InetSocketAddress
 
 case class Target(address: String, port: Int)
 
@@ -34,8 +35,10 @@ case class RequestToken(requester: ActorRef, at: Long, id: Long, request: Any)
 class RequestHandler extends Actor {
   val log = Logging(context.system, this)
   var targets = Map.empty[Target, ActorRef]
+  val conn = context.actorOf(Props[ConnectionlessSocketActor], "ConnectionlessSocket")
   def receive = {
     case msg @ GetRequest(target, community, oids) => {
+      // Todo respond
       targets.getOrElse(target, createSocket(target)) ! msg
     }
     case other => {
@@ -45,9 +48,10 @@ class RequestHandler extends Actor {
   }
 
   def createSocket(target: Target): ActorRef = {
-    val socket = context.actorOf(Props[SocketHandler], target.address)
+    val address = new InetSocketAddress(target.address, target.port)
+    val socket = context.actorOf(Props[SocketHandler], SocketHandler.name(address))
     socket ! self
-    socket ! target
+    socket ! SocketConfig(conn, address)
     targets = targets + (target -> socket)
     socket
   }

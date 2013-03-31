@@ -22,6 +22,8 @@ case class Target(address: String, port: Int)
 
 case class GetRequest(target: Target, community: String, oids: List[ObjectIdentifier])
 
+case class GetResponse(errorStatus: Int, errorIndex: Int, varbinds: List[Varbind])
+
 case class GetNextRequest(target: Target, community: String, oids: List[ObjectIdentifier])
 
 case class RequestToken(requester: ActorRef, at: Long, id: Long, request: Any)
@@ -33,13 +35,15 @@ case class RequestToken(requester: ActorRef, at: Long, id: Long, request: Any)
  * GetNextRequest
  */
 class RequestHandler extends Actor {
+
   val log = Logging(context.system, this)
   var targets = Map.empty[Target, ActorRef]
   val conn = context.actorOf(Props[ConnectionlessSocketActor], "ConnectionlessSocket")
+
   def receive = {
     case msg @ GetRequest(target, community, oids) => {
       // Todo respond
-      targets.getOrElse(target, createSocket(target)) ! msg
+      targets.getOrElse(target, createSocket(target)) forward msg
     }
     case other => {
       log.warning("Unhandled {}", other)

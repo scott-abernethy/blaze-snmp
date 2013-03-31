@@ -43,6 +43,7 @@ class ConnectionlessSocketActor extends Actor {
       conn = sender
     }
     case msg @ Send(_, _, _) => {
+      // TODO or just give this ref to the users directly
       conn ! msg
     }
     case Received(payload, from) => {

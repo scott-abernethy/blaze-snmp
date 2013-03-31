@@ -32,11 +32,10 @@ class SocketHandler extends Actor with TargetState {
   val log = Logging(context.system, this)
   var target: Option[InetSocketAddress] = None
   var conn: ActorRef = context.system.deadLetters
-  var requester: ActorRef = context.system.deadLetters
 
   override def preStart() {
     super.preStart
-    context.system.scheduler.schedule(FiniteDuration(1, "sec"), FiniteDuration(1, "sec"), self, 'Check)(context.dispatcher)
+    context.system.scheduler.schedule(FiniteDuration(2, "sec"), FiniteDuration(2, "sec"), self, 'Check)(context.dispatcher)
   }
   
   def receive = {
@@ -44,56 +43,21 @@ class SocketHandler extends Actor with TargetState {
       target = Some(address)
       conn = ref
     }
-    case ref: ActorRef => {
-      requester = ref
-    }
     case GetRequest(_, community, oids) => {
+      val respondTo = sender
       val requestId = nextId
-      
-      implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
-
-      val frame = ByteString.newBuilder
-      frame ++= Ber.version2c
-      frame ++= Ber.tlvs(BerIdentifier.OctetString, ByteString(OctetString.create(community).bytes : _*))
-
-      val pdu = ByteString.newBuilder
-      pdu ++= (Ber.tlvs(BerIdentifier.Integer, Ber.int(requestId)))
-
-      pdu ++= Ber.noErrorStatusAndIndex
-
-      pdu ++= Ber.tlvs(BerIdentifier.Sequence, {
-        oids.map{ id =>
-          Ber.tlvs(BerIdentifier.Sequence, {
-            Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(id.toList)) ++
-              Ber.tlvs(BerIdentifier.Null, ByteString.empty)
-          })
-        }.reduce(_ ++ _)
-      })
-
-      val pduBytes = pdu.result
-
-      frame ++= Ber.tlvs(PduType.GetRequest, pduBytes)
-
-      val msg = Ber.tlvs(BerIdentifier.Sequence, frame.result)
-
       log.info("Sending {}", requestId)
+      val msg = encodeGetRequest(community, requestId, oids)
       send(msg)
-      waitOn(requestId, msg, System.currentTimeMillis)
+      waitOn(requestId, respondTo, msg, System.currentTimeMillis)
     }
     case ResponsePayload(data) => {
-      implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
-
-      val in = data.iterator
-      val decoded = BerDecode.getTlv(in)
-
+      val decoded = BerDecode.getTlv(data.iterator)
       decoded match {
-        case SnmpV2Msg(community, pduType, requestId, errorStatus, errorIndex, varbinds) => {
-//          for (requester <- requests.get(requestId)) {
-//            log.info("Response to {} of {}", requestId, varbinds)
-//          }
-//          requests = requests - requestId
-          requester ! (community, pduType, requestId, errorStatus, errorIndex, varbinds)
-          cancel(requestId)          
+        case SnmpV2Msg(community, PduType.GetResponse, requestId, errorStatus, errorIndex, varbinds) => {
+          complete(requestId).foreach(_ ! GetResponse(errorStatus, errorIndex, varbinds.collect{
+            case List(id: ObjectIdentifier, variable: Variable) => Varbind(id, variable)
+          }))
         }
         case _ => {
           log.warning("Can't fathom {}", decoded)
@@ -106,8 +70,9 @@ class SocketHandler extends Actor with TargetState {
           log.info("Retry for request {} on {}", id, target)
           send(payload)
         }
-        case RequestTimeout(id) => {
+        case RequestTimeout(id, requester) => {
           log.warning("Timeout for request {} on {}", id, target)
+          // Send to requester?
         }
       }
     }
@@ -115,6 +80,35 @@ class SocketHandler extends Actor with TargetState {
       log.warning("Unhandled {} for {}", other, target)
       unhandled(other)
     }
+  }
+
+  def encodeGetRequest(community: String, requestId: Int, oids: List[ObjectIdentifier]): ByteString = {
+    implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
+
+    val frame = ByteString.newBuilder
+    frame ++= Ber.version2c
+    frame ++= Ber.tlvs(BerIdentifier.OctetString, ByteString(OctetString.create(community).bytes: _*))
+
+    val pdu = ByteString.newBuilder
+    pdu ++= (Ber.tlvs(BerIdentifier.Integer, Ber.int(requestId)))
+
+    pdu ++= Ber.noErrorStatusAndIndex
+
+    pdu ++= Ber.tlvs(BerIdentifier.Sequence, {
+      oids.map {
+        id =>
+          Ber.tlvs(BerIdentifier.Sequence, {
+            Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(id.toList)) ++
+              Ber.tlvs(BerIdentifier.Null, ByteString.empty)
+          })
+      }.reduce(_ ++ _)
+    })
+
+    val pduBytes = pdu.result
+
+    frame ++= Ber.tlvs(PduType.GetRequest, pduBytes)
+
+    Ber.tlvs(BerIdentifier.Sequence, frame.result)
   }
 
   def send(payload: ByteString) {

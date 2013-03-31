@@ -18,40 +18,38 @@ import akka.util.{ByteIterator,ByteString}
 
 object BerDecode {
   def getTlv(in: ByteIterator): Any = {
-    in.getByte match {
+    val t = in.getByte
+    val length = getDefiniteLength(in)
+    t match {
       case BerIdentifier.Integer => {
-        val length = getDefiniteLength(in)
         getInt(length, in)
       }
       case BerIdentifier.TimeTicks => {
-        val length = getDefiniteLength(in)
         new TimeTicks(getInt(length, in))
       }
       case BerIdentifier.OctetString => {
-        val length = getDefiniteLength(in)
         getOctetString(length, in)
       }
       case BerIdentifier.Sequence => {
-        val length = getDefiniteLength(in)
         val content = Array.ofDim[Byte](length)
         in.getBytes(content)
         val seq = ByteString(content)
         getSeqOfTlv(seq.iterator)
       }
       case BerIdentifier.ObjectId => {
-        val length = getDefiniteLength(in)
         val content = Array.ofDim[Byte](length)
         in.getBytes(content)
         new ObjectIdentifier(getObjectId(content.toList))
       }
       case PduType.GetResponse => {
-        val length = getDefiniteLength(in)
         val content = Array.ofDim[Byte](length)
         in.getBytes(content)
         val seq = ByteString(content)
         (PduType.GetResponse, getSeqOfTlv(seq.iterator))
       }
-      case _ => null
+      case _ => {
+        null
+      }
     }
   }
   

@@ -26,18 +26,20 @@ object Snmp {
 
 trait Variable
 
-class TimeTicks(value: Int) extends Variable {
-  override def toString = value.toString + "ticks"
+case class TimeTicks(value: Int) extends Variable {
+  override def toString = "TimeTicks(" + value + ")"
 
   def toMillis: Long = value * 100
 }
 
 case class Varbind(id: ObjectIdentifier, value: Variable)
 
+
+
 object SnmpV2Msg {
-  def unapply(in: Any): Option[(String, Byte, Int, Int, Int, Any)] = {
+  def unapply(in: Any): Option[(String, Byte, Int, Int, Int, List[Any])] = {
     in match {
-      case List(1, community: OctetString, (pduType: Byte, List(requestId: Int, errorStatus: Int, errorIndex: Int, varbinds))) => Some(community.toString, pduType, requestId, errorStatus, errorIndex, varbinds)
+      case List(1, community: OctetString, (pduType: Byte, List(requestId: Int, errorStatus: Int, errorIndex: Int, varbinds: List[Any]))) => Some(community.toString, pduType, requestId, errorStatus, errorIndex, varbinds)
       case _ => None
     }
   }

@@ -14,6 +14,9 @@
  * limitations under the License.
  */
 
+package blazesnmp
+
+import blazesnmp.{Snmp, OctetString, BerDecode, BerIdentifier}
 import org.scalatest._
 import org.scalatest.matchers.ShouldMatchers
 import akka.util.ByteString

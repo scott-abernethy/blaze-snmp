@@ -14,17 +14,20 @@
  * limitations under the License.
  */
 
+package blazesnmp
+
 import akka.actor.{Props, ActorRef, Actor}
 import akka.event.Logging
 import java.net.InetSocketAddress
+import akka.routing.RoundRobinRouter
 
-case class Target(address: String, port: Int)
+case class Target(address: InetSocketAddress, community: String)
 
-case class GetRequest(target: Target, community: String, oids: List[ObjectIdentifier])
+case class GetRequest(target: Target, oids: List[ObjectIdentifier])
 
 case class GetResponse(errorStatus: Int, errorIndex: Int, varbinds: List[Varbind])
 
-case class GetNextRequest(target: Target, community: String, oids: List[ObjectIdentifier])
+case class GetNextRequest(target: Target, oids: List[ObjectIdentifier])
 
 case class RequestToken(requester: ActorRef, at: Long, id: Long, request: Any)
 
@@ -39,10 +42,10 @@ class RequestHandler extends Actor {
   val log = Logging(context.system, this)
   var targets = Map.empty[Target, ActorRef]
   val conn = context.actorOf(Props[ConnectionlessSocketActor], "ConnectionlessSocket")
+//  val conn = context.actorOf(Props[ConnectionlessSocketActor].withRouter(RoundRobinRouter(nrOfInstances = 10)))
 
   def receive = {
-    case msg @ GetRequest(target, community, oids) => {
-      // Todo respond
+    case msg @ GetRequest(target, oids) => {
       targets.getOrElse(target, createSocket(target)) forward msg
     }
     case other => {
@@ -52,9 +55,8 @@ class RequestHandler extends Actor {
   }
 
   def createSocket(target: Target): ActorRef = {
-    val address = new InetSocketAddress(target.address, target.port)
+    val address = target.address
     val socket = context.actorOf(Props[SocketHandler], SocketHandler.name(address))
-    socket ! self
     socket ! SocketConfig(conn, address)
     targets = targets + (target -> socket)
     socket

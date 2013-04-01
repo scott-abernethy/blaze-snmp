@@ -1,5 +1,3 @@
-import java.util.Date
-
 /*
  * Copyright (c) 2013 Scott Abernethy.
  *
@@ -15,6 +13,10 @@ import java.util.Date
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+package blazesnmp
+
+import java.util.Date
 
 class Snmp {
 

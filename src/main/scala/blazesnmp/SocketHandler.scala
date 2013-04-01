@@ -14,11 +14,13 @@
  * limitations under the License.
  */
 
+package blazesnmp
+
 import akka.actor.{ActorRef, Actor}
 import akka.event.Logging
 import akka.io.UdpFF.{NoAck, Send}
 import akka.util.ByteString
-import java.net.{InetSocketAddress}
+import java.net.InetSocketAddress
 import scala.concurrent.duration.FiniteDuration
 
 case class SocketConfig(connection: ActorRef, remoteAddress: InetSocketAddress)
@@ -43,11 +45,11 @@ class SocketHandler extends Actor with TargetState {
       target = Some(address)
       conn = ref
     }
-    case GetRequest(_, community, oids) => {
+    case GetRequest(target, oids) => {
       val respondTo = sender
       val requestId = nextId
-      log.info("Sending {}", requestId)
-      val msg = encodeGetRequest(community, requestId, oids)
+      log.debug("Sending {}", requestId)
+      val msg = encodeGetRequest(target.community, requestId, oids)
       send(msg)
       waitOn(requestId, respondTo, msg, System.currentTimeMillis)
     }
@@ -67,11 +69,11 @@ class SocketHandler extends Actor with TargetState {
     case 'Check => {
       timeouts(System.currentTimeMillis).foreach{
         case RequestRetry(id, payload) => {
-          log.info("Retry for request {} on {}", id, target)
+          log.debug("Retry for request {} on {}", id, target)
           send(payload)
         }
         case RequestTimeout(id, requester) => {
-          log.warning("Timeout for request {} on {}", id, target)
+          log.debug("Timeout for request {} on {}", id, target)
           // Send to requester?
         }
       }

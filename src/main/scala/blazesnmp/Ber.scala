@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+package blazesnmp
+
 import akka.util.{ByteStringBuilder, ByteString}
 
 // asn1 ber

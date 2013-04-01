@@ -14,22 +14,8 @@
  * limitations under the License.
  */
 
-import akka.actor.Actor
-import collection.immutable.Queue
+package blazesnmp
 
-case class Timeout(at: Long, id: Int)
+class SnmpWireProtocol {
 
-class TimeoutActor extends Actor {
-
-  val outstanding = Queue.empty[Timeout]
-
-  def receive = {
-    case msg @ Timeout(at, id) => {
-      // Assume messages come in with at in order, so we don't have to sort.
-
-    }
-    case other => {
-      unhandled(other)
-    }
-  }
 }

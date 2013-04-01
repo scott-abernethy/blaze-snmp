@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+package blazesnmp
+
 import akka.actor.ActorRef
 import akka.util.ByteString
 

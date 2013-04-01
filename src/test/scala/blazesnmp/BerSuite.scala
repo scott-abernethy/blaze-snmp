@@ -1,3 +1,5 @@
+package blazesnmp
+
 /*
  * Copyright (c) 2013 Scott Abernethy.
  *
@@ -14,6 +16,7 @@
  * limitations under the License.
  */
 
+import blazesnmp.Ber
 import org.scalatest._
 import org.scalatest.matchers.ShouldMatchers
 import Ber._

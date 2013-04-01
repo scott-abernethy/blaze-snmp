@@ -14,8 +14,11 @@
  * limitations under the License.
  */
 
+package blazesnmp
+
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
+import blazesnmp.{RequestTimeout, RequestRetry, Waiting, TargetState}
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import akka.util.ByteString

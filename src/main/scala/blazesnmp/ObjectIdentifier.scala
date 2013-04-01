@@ -1,5 +1,3 @@
-import util.Try
-
 /*
  * Copyright (c) 2013 Scott Abernethy.
  *
@@ -15,6 +13,10 @@ import util.Try
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
+package blazesnmp
+
+import util.Try
 
 case class ObjectIdentifier(ids: List[Int]) extends Variable {
   def toList(): List[Int] = ids

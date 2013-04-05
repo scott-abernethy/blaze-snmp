@@ -21,6 +21,9 @@ import akka.util.{ByteStringBuilder, ByteString}
 // asn1 ber
 
 object Ber {
+
+  implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
+
   def definiteLength(octets: Int): ByteString = {
     if (octets < 0) {
       throw new UnsupportedOperationException
@@ -58,7 +61,7 @@ object Ber {
     bs.result
   }
 
-  def objectId(oid: List[Int]): ByteString = {
+  def objectId(oid: Seq[Int]): ByteString = {
     // TODO the prefix 1.3 has a short form (1 byte) .. first two are (x * 40) + y
     // TODO cache oid as bytestrings?
     //7 bits
@@ -138,15 +141,15 @@ object Ber {
     }
   }
   
-  lazy val version2c: ByteString = {
+  val version2c: ByteString = {
     val bs = ByteString.newBuilder
     bs.putByte(BerIdentifier.Integer)
     bs.putByte(1.toByte)
     bs.putByte(Version.V2c)
-    bs.result
+    bs.result.compact
   }
   
-  lazy val noErrorStatusAndIndex: ByteString = {
+  val noErrorStatusAndIndex: ByteString = {
     val bs = ByteString.newBuilder
     bs.putByte(BerIdentifier.Integer)
     bs.putByte(1.toByte)
@@ -154,7 +157,7 @@ object Ber {
     bs.putByte(BerIdentifier.Integer)
     bs.putByte(1.toByte)
     bs.putByte(0) // error index
-    bs.result
+    bs.result.compact
   }
 }
 

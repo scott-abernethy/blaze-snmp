@@ -19,6 +19,7 @@ package blazesnmp
 import akka.util.{ByteIterator,ByteString}
 
 object BerDecode {
+
   def getTlv(in: ByteIterator): Any = {
     val t = in.getByte
     val length = getDefiniteLength(in)
@@ -33,10 +34,7 @@ object BerDecode {
         getOctetString(length, in)
       }
       case BerIdentifier.Sequence => {
-        val content = Array.ofDim[Byte](length)
-        in.getBytes(content)
-        val seq = ByteString(content)
-        getSeqOfTlv(seq.iterator)
+        getSeqOfTlv(getIterator(in, length))
       }
       case BerIdentifier.ObjectId => {
         val content = Array.ofDim[Byte](length)
@@ -44,17 +42,20 @@ object BerDecode {
         new ObjectIdentifier(getObjectId(content.toList))
       }
       case PduType.GetResponse => {
-        val content = Array.ofDim[Byte](length)
-        in.getBytes(content)
-        val seq = ByteString(content)
-        (PduType.GetResponse, getSeqOfTlv(seq.iterator))
+        (PduType.GetResponse, getSeqOfTlv(getIterator(in, length)))
       }
       case _ => {
         null
       }
     }
   }
-  
+
+  def getIterator(in: ByteIterator, length: Int): ByteIterator = {
+    val copy = in.clone
+    in.drop(length)
+    copy.take(length)
+  }
+
   def getSeqOfTlv(in: ByteIterator): List[Any] = {
     val head = getTlv(in)
     if (head == null) {
@@ -72,8 +73,8 @@ object BerDecode {
   
   def getDefiniteLength(in: ByteIterator): Int = {
     val first = in.getByte
-    if ((first & msb) == msb) {
-      val more = (first ^ msb).toInt
+    if (first < 0) {
+      val more = (first ^ msb)
       getInt(more, in)
     }
     else {
@@ -87,22 +88,21 @@ object BerDecode {
   
   def getInt(length: Int, in: ByteIterator): Int = {
     // TODO check bounds?
-    val parts = for (i <- List.range(0, length).reverse) yield (unsignedByte(in.getByte) << (i * 8))
+    val parts = for (i <- (length - 1) to (0, -1)) yield (unsignedByte(in.getByte) << (i * 8))
     parts.foldRight(0)(_ + _)
   }
   
   def getOctetString(length: Int, in: ByteIterator): OctetString = {
     // TODO check bounds?
-    //val s: String = in.take(length).toList.map(b => b.toChar).mkString
-    //s
-    val cs = for (i <- List.range(0, length)) yield in.getByte
+    // Use Array here? That's what the Akka io docs use...
+    val cs = for (_ <- 0 until length) yield in.getByte
     new OctetString(cs)
   }
 
-  def getObjectId(bytes: List[Byte]): List[Int] = {
+  def getObjectId(bytes: Seq[Byte]): Seq[Int] = {
     bytes match {
-      case Snmp.IsoOrg :: tail => {
-        1 :: 3 :: getListOfOverflowingInt(tail, Nil)
+      case Snmp.IsoOrg +: tail => {
+        1 +: 3 +: getListOfOverflowingInt(tail, Nil)
       }
       case _ => {
         throw new IllegalArgumentException("Todo")
@@ -110,18 +110,18 @@ object BerDecode {
     }
   }
 
-  def getListOfOverflowingInt(bytes: List[Byte], overflow: List[Int]): List[Int] = {
-    def sumValue(lsb: Int, msbs: List[Int]) = {
+  def getListOfOverflowingInt(bytes: Seq[Byte], overflow: Seq[Int]): Seq[Int] = {
+    def sumValue(lsb: Int, msbs: Seq[Int]) = {
       lsb + List.range(0, msbs.size).
         map( i => msbs(i) << ((i + 1) * 7)).
         fold(0)(_ + _)
     }
     bytes match {
       case IncompleteOverflowingInt(value) :: xs => {
-        getListOfOverflowingInt(xs, value :: overflow)
+        getListOfOverflowingInt(xs, value +: overflow)
       }
       case CompleteOverflowingInt(value) :: xs => {
-        sumValue(value, overflow) :: getListOfOverflowingInt(xs, Nil)
+        sumValue(value, overflow) +: getListOfOverflowingInt(xs, Nil)
       }
       case _ => {
         Nil

@@ -16,12 +16,13 @@
 
 package blazesnmp
 
-case class OctetString(val bytes: List[Byte]) extends Variable {
+case class OctetString(val bytes: Seq[Byte]) extends Variable {
+  // Todo use ByteString and toUtf8String?
   override def toString(): String = bytes.map(_.toChar).mkString
 }
 
 object OctetString {
   def create(string: String): OctetString = {
-    new OctetString(string.toList.map(_.toByte))
+    new OctetString(string.toSeq.map(_.toByte))
   }
 }

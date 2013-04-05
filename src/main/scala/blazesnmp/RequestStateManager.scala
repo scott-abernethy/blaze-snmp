@@ -36,12 +36,13 @@ trait TargetState {
     waitingOn = Waiting(id, requester, payload, at + 5000, attempt) :: waitingOn
   }
   def complete(id: Int): Option[ActorRef] = {
-    val (remaining, cancelled) = waitingOn.span(id != _.id)
+    val (completed, remaining) = waitingOn.partition(id == _.id)
     waitingOn = remaining
-    cancelled.headOption.map(_.requester)
+    assert(completed.size <= 1)
+    completed.headOption.map(_.requester)
   }
   def timeouts(at: Long): List[Any] = {
-    val (ok, timedOut) = waitingOn.partition(_.at > at)
+    val (ok, timedOut) = waitingOn.span(_.at > at)
     waitingOn = ok
     timedOut.map{
       case Waiting(id, requester, _, _, attempt) if attempt > 3 => RequestTimeout(id, requester)

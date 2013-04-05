@@ -41,8 +41,8 @@ class RequestHandler extends Actor {
 
   val log = Logging(context.system, this)
   var targets = Map.empty[Target, ActorRef]
-  val conn = context.actorOf(Props[ConnectionlessSocketActor], "ConnectionlessSocket")
-//  val conn = context.actorOf(Props[ConnectionlessSocketActor].withRouter(RoundRobinRouter(nrOfInstances = 10)))
+//  val conn = context.actorOf(Props[ConnectionlessSocketActor], "ConnectionlessSocket")
+  val conn = context.actorOf(Props[ConnectionlessSocketActor].withRouter(RoundRobinRouter(nrOfInstances = 20)))
 
   def receive = {
     case msg @ GetRequest(target, oids) => {

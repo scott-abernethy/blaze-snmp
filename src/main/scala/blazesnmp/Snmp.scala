@@ -16,8 +16,6 @@
 
 package blazesnmp
 
-import java.util.Date
-
 class Snmp {
 
 }

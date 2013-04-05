@@ -18,8 +18,8 @@ package blazesnmp
 
 import util.Try
 
-case class ObjectIdentifier(ids: List[Int]) extends Variable {
-  def toList(): List[Int] = ids
+case class ObjectIdentifier(ids: Seq[Int]) extends Variable {
+  def toSeq(): Seq[Int] = ids
 
   override def toString(): String = {
     ids.mkString(".")
@@ -38,7 +38,7 @@ object ObjectIdentifier {
   def create(oid: String): ObjectIdentifier = {
     new ObjectIdentifier(
       for {
-        bit <- oid.split('.').toList
+        bit <- oid.split('.')
         id <- Try(bit.toInt).toOption
       } yield id
     )

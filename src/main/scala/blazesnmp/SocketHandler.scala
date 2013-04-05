@@ -35,6 +35,9 @@ class SocketHandler extends Actor with TargetState {
   var target: Option[InetSocketAddress] = None
   var conn: ActorRef = context.system.deadLetters
 
+  var encodes = List[Long]()
+  var decodes = List[Long]()
+
   override def preStart() {
     super.preStart
     context.system.scheduler.schedule(FiniteDuration(2, "sec"), FiniteDuration(2, "sec"), self, 'Check)(context.dispatcher)
@@ -48,16 +51,21 @@ class SocketHandler extends Actor with TargetState {
     case GetRequest(target, oids) => {
       val respondTo = sender
       val requestId = nextId
-      log.debug("Sending {}", requestId)
+      val start = System.currentTimeMillis
       val msg = encodeGetRequest(target.community, requestId, oids)
+      encodes = (System.currentTimeMillis - start) :: encodes
+      log.debug("Sending {}", requestId)
       send(msg)
       waitOn(requestId, respondTo, msg, System.currentTimeMillis)
     }
     case ResponsePayload(data) => {
+      val start = System.currentTimeMillis
       val decoded = BerDecode.getTlv(data.iterator)
       decoded match {
         case SnmpV2Msg(community, PduType.GetResponse, requestId, errorStatus, errorIndex, varbinds) => {
-          complete(requestId).foreach(_ ! GetResponse(errorStatus, errorIndex, varbinds.collect{
+          val c = complete(requestId)
+          decodes = (System.currentTimeMillis - start) :: decodes
+          c.foreach(_ ! GetResponse(errorStatus, errorIndex, varbinds.collect{
             case List(id: ObjectIdentifier, variable: Variable) => Varbind(id, variable)
           }))
         }
@@ -67,6 +75,9 @@ class SocketHandler extends Actor with TargetState {
       }
     }
     case 'Check => {
+//      val eavg = encodes.sum.toDouble / encodes.size
+//      val davg = decodes.sum.toDouble / decodes.size
+//      log.info(f"cod~ $eavg%3.3f / dec ~ $davg%3.3f")
       timeouts(System.currentTimeMillis).foreach{
         case RequestRetry(id, payload) => {
           log.debug("Retry for request {} on {}", id, target)
@@ -84,31 +95,52 @@ class SocketHandler extends Actor with TargetState {
     }
   }
 
+  // Share community cache?
+  var communityCache = Map[String, ByteString]()
+  var requestOidCache = Map[ObjectIdentifier, ByteString]()
+
+  def addToCommunityCache(community: String): ByteString = {
+    val encoded = communityEncoding(community).compact
+    communityCache = communityCache + (community -> encoded)
+    encoded
+  }
+
+
+  def communityEncoding(community: String): ByteString = {
+    Ber.tlvs(BerIdentifier.OctetString, ByteString(OctetString.create(community).bytes: _*))
+  }
+
+  def addToRequestOidCache(id: ObjectIdentifier): ByteString = {
+    val encoded = requestOidEncoding(id).compact
+    requestOidCache = requestOidCache + (id -> encoded)
+    encoded
+  }
+
+  def requestOidEncoding(id: ObjectIdentifier): ByteString = {
+    Ber.tlvs(BerIdentifier.Sequence, {
+      Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(id.toSeq)) ++
+        Ber.tlvs(BerIdentifier.Null, ByteString.empty)
+    })
+  }
+
   def encodeGetRequest(community: String, requestId: Int, oids: List[ObjectIdentifier]): ByteString = {
     implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
 
     val frame = ByteString.newBuilder
     frame ++= Ber.version2c
-    frame ++= Ber.tlvs(BerIdentifier.OctetString, ByteString(OctetString.create(community).bytes: _*))
+    frame ++= communityCache.getOrElse(community, addToCommunityCache(community))
 
     val pdu = ByteString.newBuilder
-    pdu ++= (Ber.tlvs(BerIdentifier.Integer, Ber.int(requestId)))
-
+    pdu ++= Ber.tlvs(BerIdentifier.Integer, Ber.int(requestId))
     pdu ++= Ber.noErrorStatusAndIndex
-
     pdu ++= Ber.tlvs(BerIdentifier.Sequence, {
       oids.map {
-        id =>
-          Ber.tlvs(BerIdentifier.Sequence, {
-            Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(id.toList)) ++
-              Ber.tlvs(BerIdentifier.Null, ByteString.empty)
-          })
+//        id => requestOidEncoding(id)
+        id => requestOidCache.getOrElse(id, addToRequestOidCache(id))
       }.reduce(_ ++ _)
     })
 
-    val pduBytes = pdu.result
-
-    frame ++= Ber.tlvs(PduType.GetRequest, pduBytes)
+    frame ++= Ber.tlvs(PduType.GetRequest, pdu.result)
 
     Ber.tlvs(BerIdentifier.Sequence, frame.result)
   }

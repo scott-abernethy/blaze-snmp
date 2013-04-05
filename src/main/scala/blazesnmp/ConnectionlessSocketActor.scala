@@ -38,50 +38,48 @@ case class ResponsePayload(payload: ByteString)
 class ConnectionlessSocketActor extends Actor {
 
   val log = Logging(context.system, this)
-  var conn: ActorRef = context.system.deadLetters
-  var buffer: Queue[Send] = Queue()
-  var count: Int = 0
-  val maxCount: Int = 4
+  var conn: Option[ActorRef] = None
+  var buffer = Queue[Send]()
+//  var buffering = false
 
   override def preStart() {
     super.preStart
     val localAddress = new InetSocketAddress(ConnectionlessSocketActor.nextPort.incrementAndGet())
-//    val localAddress = new InetSocketAddress(InetAddress.getByName("10.16.104.2"), ConnectionlessSocketActor.nextPort.incrementAndGet())
-    log.info("Binding to {}", localAddress)
+//    val localAddress = new InetSocketAddress(InetAddress.getByName("10.16.104.8"), ConnectionlessSocketActor.nextPort.incrementAndGet())
+    log.debug("Binding to {}", localAddress)
     implicit val actorSystem = context.system
     IO(UdpFF) ! Bind(self, localAddress)
-    context.system.scheduler.schedule(FiniteDuration.apply(1, "second"),FiniteDuration.apply(1, "second"),self,'Drain)(context.dispatcher)
   }
 
   def receive = {
     case Bound => {
       log.debug("Bound on {}", sender)
-      conn = sender
+      conn = Some(sender)
     }
-    case Send(payload, target, _) => {
-      val msg = Send(payload, target, true)
-      if (count < maxCount) {
-        conn ! msg
-        count = count + 1
-      }
-      else {
-        buffer.enqueue(msg)
-      }
+    case msg @ Send(payload, target, NoAck) => {
+//      if (/*!buffering && */conn.isDefined) {
+        conn.foreach(_ ! msg)
+//        buffering = true
+//      }
+//      else {
+//        buffer = buffer.enqueue(msg)
+//      }
     }
-    case CommandFailed(cmd) => {
-      processQueue()
+    case CommandFailed(msg @ Send(_, _, _)) => {
+      log.info("fail")
+//      buffering = false
+//      buffer = buffer.enqueue(msg)
+//      drain()
+      conn.foreach(_ ! msg)
     }
-    case true => {
-      processQueue()
+    case WantAck => {
+      log.info("ok")
+//      buffering = false
+//      drain()
     }
-    case 'Drain => {
-      if (count < maxCount && !buffer.isEmpty) {
-        val (msg, tail) = buffer.dequeue
-        buffer = tail
-        conn ! msg
-        count = count + 1
-      }
-    }
+//    case 'Drain => {
+//      drain()
+//    }
     case Received(payload, from) => {
       // strategy to connect request & response - by global unique request Id .. by target address & request Id.
       val handler = responseHandler(from)
@@ -89,20 +87,19 @@ class ConnectionlessSocketActor extends Actor {
       handler ! ResponsePayload(payload)
     }
     case other => {
-      log.info("Unhandled {}", other)
+      log.warning("Unhandled {}", other)
       unhandled(other)
     }
   }
 
-  def processQueue() {
-    count = count - 1
-    if (count < maxCount && !buffer.isEmpty) {
-      val (msg, tail) = buffer.dequeue
-      buffer = tail
-      conn ! msg
-      count = count + 1
-    }
-  }
+//  def drain() {
+//    if (!buffering && !buffer.isEmpty && conn.isDefined) {
+//      val (msg, tail) = buffer.dequeue
+//      buffer = tail
+//      conn.foreach(_ ! msg)
+//      buffering = true
+//    }
+//  }
 
   def responseHandler(from: InetSocketAddress): ActorRef = {
     context.system.actorFor("/user/RequestHandler/" + SocketHandler.name(from))
@@ -111,4 +108,7 @@ class ConnectionlessSocketActor extends Actor {
 
 object ConnectionlessSocketActor {
   val nextPort = new AtomicInteger(9162)
+}
+
+case object WantAck {
 }

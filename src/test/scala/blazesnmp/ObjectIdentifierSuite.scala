@@ -22,7 +22,7 @@ import org.scalatest.matchers.ShouldMatchers
 
 class ObjectIdentifierSuite extends FunSuite with ShouldMatchers {
   test("create from string") {
-    ObjectIdentifier.create("1.3.1.6.2509.8.0").toList should equal(List(1,3,1,6,2509,8,0))
-    ObjectIdentifier.create(".1.3.1.6.2509.8.0").toList should equal(List(1,3,1,6,2509,8,0))
+    ObjectIdentifier.create("1.3.1.6.2509.8.0").toSeq should equal(List(1,3,1,6,2509,8,0))
+    ObjectIdentifier.create(".1.3.1.6.2509.8.0").toSeq should equal(List(1,3,1,6,2509,8,0))
   }
 }

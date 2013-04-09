@@ -16,7 +16,6 @@
 
 package blazesnmp
 
-import blazesnmp.ObjectIdentifier
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 

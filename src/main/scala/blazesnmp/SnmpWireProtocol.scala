@@ -16,6 +16,6 @@
 
 package blazesnmp
 
-class SnmpWireProtocol {
+trait SnmpWireProtocol {
 
 }

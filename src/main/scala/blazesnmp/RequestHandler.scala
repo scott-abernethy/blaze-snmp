@@ -48,10 +48,6 @@ class RequestHandler extends Actor {
     case msg @ GetRequest(target, oids) => {
       targets.getOrElse(target, createSocket(target)) forward msg
     }
-    case other => {
-      log.warning("Unhandled {}", other)
-      unhandled(other)
-    }
   }
 
   def createSocket(target: Target): ActorRef = {

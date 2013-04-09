@@ -19,43 +19,50 @@ package blazesnmp
 import akka.actor.ActorRef
 import akka.util.ByteString
 
+case class Waiting(id: Int, requester: ActorRef, payload: ByteString, at: Long, attempt: Int)
+
+trait RequestTimeoutAction
+
+case class RequestRetry(id: Int, payload: ByteString) extends RequestTimeoutAction
+
+case class RequestTimeout(id: Int, requester: ActorRef) extends RequestTimeoutAction
+
 trait TargetState {
   val MaxRequestId = (1 << 15) - 1
-  val MinRequestId = 1
+  val MinRequestId = 1 // TODO use neg numbers?
   var id = MinRequestId - 1
-  var waitingOn = List[Waiting]()
-  
+  var waitingOn = Map[Int, Waiting]()
+  val Timeout = 5000 // msec
+  val MaxRetries = 3
+
   def nextId(): Int = {
     id = if (id >= MaxRequestId) MinRequestId else id + 1
     id
   }
+
   def waitOn(id: Int, requester: ActorRef, payload: ByteString, at: Long) {
     waitOn(id, requester, payload, at, 1)
   }
+
   private def waitOn(id: Int, requester: ActorRef, payload: ByteString, at: Long, attempt: Int) {
-    waitingOn = Waiting(id, requester, payload, at + 5000, attempt) :: waitingOn
+    waitingOn = waitingOn + (id -> Waiting(id, requester, payload, at + Timeout, attempt))
   }
+
   def complete(id: Int): Option[ActorRef] = {
-    val (completed, remaining) = waitingOn.partition(id == _.id)
-    waitingOn = remaining
-    assert(completed.size <= 1)
-    completed.headOption.map(_.requester)
+    val ref = waitingOn.get(id).map(_.requester)
+    waitingOn = waitingOn - id
+    ref
   }
-  def timeouts(at: Long): List[Any] = {
-    val (ok, timedOut) = waitingOn.span(_.at > at)
+
+  def timeouts(at: Long): Seq[RequestTimeoutAction] = {
+    val (ok, timedOut) = waitingOn.partition(i => i._2.at > at)
     waitingOn = ok
-    timedOut.map{
-      case Waiting(id, requester, _, _, attempt) if attempt > 3 => RequestTimeout(id, requester)
-      case Waiting(id, requester, payload, _, attempt) => {
+    timedOut.toSeq.map{
+      case (_, Waiting(id, requester, _, _, attempt)) if attempt > MaxRetries => RequestTimeout(id, requester)
+      case (_, Waiting(id, requester, payload, _, attempt)) => {
         waitOn(id, requester, payload, at, attempt + 1)
         RequestRetry(id, payload)
       }
     }
   }
 }
-
-case class Waiting(id: Int, requester: ActorRef, payload: ByteString, at: Long, attempt: Int)
-
-case class RequestRetry(id: Int, payload: ByteString)
-
-case class RequestTimeout(id: Int, requester: ActorRef)

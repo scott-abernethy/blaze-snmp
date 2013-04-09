@@ -18,7 +18,6 @@ package blazesnmp
 
 import akka.actor.{ActorRef, Actor}
 import akka.event.Logging
-import akka.io.UdpFF.{NoAck, Send}
 import akka.util.ByteString
 import java.net.InetSocketAddress
 import scala.concurrent.duration.FiniteDuration
@@ -31,6 +30,8 @@ case class SocketConfig(connection: ActorRef, remoteAddress: InetSocketAddress)
  * Resizing packets is target dependent ... as they could be on different networks.
  */
 class SocketHandler extends Actor with TargetState {
+  import BerEncode._
+
   val log = Logging(context.system, this)
   var target: Option[InetSocketAddress] = None
   var conn: ActorRef = context.system.deadLetters
@@ -42,7 +43,7 @@ class SocketHandler extends Actor with TargetState {
     super.preStart
     context.system.scheduler.schedule(FiniteDuration(2, "sec"), FiniteDuration(2, "sec"), self, 'Check)(context.dispatcher)
   }
-  
+
   def receive = {
     case SocketConfig(ref, address) => {
       target = Some(address)
@@ -50,21 +51,21 @@ class SocketHandler extends Actor with TargetState {
     }
     case GetRequest(target, oids) => {
       val respondTo = sender
-      val requestId = nextId
-      val start = System.currentTimeMillis
+      val requestId = nextId()
+      //val start = System.currentTimeMillis
       val msg = encodeGetRequest(target.community, requestId, oids)
-      encodes = (System.currentTimeMillis - start) :: encodes
+      //encodes = (System.currentTimeMillis - start) :: encodes
       log.debug("Sending {}", requestId)
       send(msg)
       waitOn(requestId, respondTo, msg, System.currentTimeMillis)
     }
     case ResponsePayload(data) => {
-      val start = System.currentTimeMillis
+      //val start = System.currentTimeMillis
       val decoded = BerDecode.getTlv(data.iterator)
       decoded match {
         case SnmpV2Msg(community, PduType.GetResponse, requestId, errorStatus, errorIndex, varbinds) => {
           val c = complete(requestId)
-          decodes = (System.currentTimeMillis - start) :: decodes
+          //decodes = (System.currentTimeMillis - start) :: decodes
           c.foreach(_ ! GetResponse(errorStatus, errorIndex, varbinds.collect{
             case List(id: ObjectIdentifier, variable: Variable) => Varbind(id, variable)
           }))
@@ -89,12 +90,9 @@ class SocketHandler extends Actor with TargetState {
         }
       }
     }
-    case other => {
-      log.warning("Unhandled {} for {}", other, target)
-      unhandled(other)
-    }
   }
 
+  // Could pre-build entire request for repeated requests? ... but then i can't programmatically split the request depending on MTU size.
   // Share community cache?
   var communityCache = Map[String, ByteString]()
   var requestOidCache = Map[ObjectIdentifier, ByteString]()
@@ -105,9 +103,12 @@ class SocketHandler extends Actor with TargetState {
     encoded
   }
 
-
   def communityEncoding(community: String): ByteString = {
-    Ber.tlvs(BerIdentifier.OctetString, ByteString(OctetString.create(community).bytes: _*))
+    val builder = ByteString.newBuilder
+    putTlv(BerIdentifier.OctetString, x => {
+      for (byte <- OctetString.create(community).bytes) x.putByte(byte)
+    })(builder)
+    builder.result()
   }
 
   def addToRequestOidCache(id: ObjectIdentifier): ByteString = {
@@ -117,36 +118,39 @@ class SocketHandler extends Actor with TargetState {
   }
 
   def requestOidEncoding(id: ObjectIdentifier): ByteString = {
-    Ber.tlvs(BerIdentifier.Sequence, {
-      Ber.tlvs(BerIdentifier.ObjectId, Ber.objectId(id.toSeq)) ++
-        Ber.tlvs(BerIdentifier.Null, ByteString.empty)
-    })
+    val builder = ByteString.newBuilder
+    putTlv(BerIdentifier.Sequence, seq => {
+      putTlv(BerIdentifier.ObjectId, putObjectId(id.toSeq) _)(seq)
+      putTlv(BerIdentifier.Null, _ => {})(seq)
+    })(builder)
+    builder.result()
   }
 
   def encodeGetRequest(community: String, requestId: Int, oids: List[ObjectIdentifier]): ByteString = {
     implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
 
-    val frame = ByteString.newBuilder
-    frame ++= Ber.version2c
-    frame ++= communityCache.getOrElse(community, addToCommunityCache(community))
+    val builder = ByteString.newBuilder
+    builder.sizeHint(200)
 
-    val pdu = ByteString.newBuilder
-    pdu ++= Ber.tlvs(BerIdentifier.Integer, Ber.int(requestId))
-    pdu ++= Ber.noErrorStatusAndIndex
-    pdu ++= Ber.tlvs(BerIdentifier.Sequence, {
-      oids.map {
-//        id => requestOidEncoding(id)
-        id => requestOidCache.getOrElse(id, addToRequestOidCache(id))
-      }.reduce(_ ++ _)
-    })
+    putTlv(BerIdentifier.Sequence, frame => {
+      frame ++= version2c
+      frame ++= communityCache.getOrElse(community, addToCommunityCache(community))
+      putTlv(PduType.GetRequest, pdu => {
+        putTlv(BerIdentifier.Integer, putInt(requestId) _)(pdu)
+        pdu ++= noErrorStatusAndIndex
+        putTlv(BerIdentifier.Sequence, seq => {
+          oids.map {
+          id => requestOidCache.getOrElse(id, addToRequestOidCache(id))
+          }.foreach( seq ++= _ )
+        })(pdu)
+      })(frame)
+    })(builder)
 
-    frame ++= Ber.tlvs(PduType.GetRequest, pdu.result)
-
-    Ber.tlvs(BerIdentifier.Sequence, frame.result)
+    builder.result
   }
 
   def send(payload: ByteString) {
-    for (to <- target) conn ! Send(payload, to, NoAck)
+    for (to <- target) conn ! RequestPayload(payload, to)
   }
 }
 

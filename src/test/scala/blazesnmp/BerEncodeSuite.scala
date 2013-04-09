@@ -1,5 +1,3 @@
-package blazesnmp
-
 /*
  * Copyright (c) 2013 Scott Abernethy.
  *
@@ -16,13 +14,15 @@ package blazesnmp
  * limitations under the License.
  */
 
-import blazesnmp.Ber
+package blazesnmp
+
 import org.scalatest._
 import org.scalatest.matchers.ShouldMatchers
-import Ber._
+import BerEncode._
+import akka.util.ByteString
 
-class BerSuite extends FunSuite with ShouldMatchers {
-  
+class BerEncodeSuite extends FunSuite with ShouldMatchers {
+
   /* This encoding is always used if the encoding is primitive or the encoding is constructed and data is immediately available. Depending on the actual length of the content the length octets are encoded using either a short form or a long form. Both forms store numeric data as unsigned binary integers in big-endian encoding.
 In the short form, the length octets consist of a single octet in which 
 bits 7 to 1 encode the number of octets in the contents octets (which may be zero).
@@ -46,25 +46,17 @@ Example: L = 435 can be encoded as
           0000000110110011
 [edit]
   */
-  
+
   test("definite length short form") {
-    definiteLength(0) should equal (List(0.toByte))
-    definiteLength(38) should equal (List(38.toByte))
-    definiteLength(1) should equal (List(1.toByte))
-    definiteLength(127) should equal (List(127.toByte))
+    definiteLength(0) should equal(List(0.toByte))
+    definiteLength(38) should equal(List(38.toByte))
+    definiteLength(1) should equal(List(1.toByte))
+    definiteLength(127) should equal(List(127.toByte))
   }
-  
+
   test("definite length long form") {
-    definiteLength(435) should equal (List(130.toByte, 1.toByte, 179.toByte))
-    definiteLength(128) should equal (List(129.toByte, 128.toByte))
-  }
-  
-  test("seq bytes") {
-    seqBytes(0) should equal (List(0.toByte))
-    seqBytes(1) should equal (List(1.toByte))
-    seqBytes(128) should equal (List(128.toByte))
-    seqBytes(255) should equal (List(255.toByte))
-    seqBytes(435) should equal (List(179.toByte, 1.toByte))
+    definiteLength(435) should equal(List(130.toByte, 1.toByte, 179.toByte))
+    definiteLength(128) should equal(List(129.toByte, 128.toByte))
   }
 
   test("overflowing int") {
@@ -86,5 +78,9 @@ Example: L = 435 can be encoded as
     int(255) should equal(List(0.toByte, 255.toByte))
     int(256) should equal(List(1.toByte, 0.toByte))
     int(-129) should equal(List(0xff.toByte, 0x7f.toByte))
+  }
+
+  test("object identifier") {
+    objectId(Seq(1, 3, 1, 9, 43, 9, 127, 1, 2)) should equal(List(Snmp.IsoOrg, 0x01.toByte, 0x09.toByte, 0x2b.toByte, 0x09.toByte, 127.toByte, 0x01.toByte, 0x02.toByte))
   }
 }

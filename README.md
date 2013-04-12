@@ -1,6 +1,6 @@
 # Blaze SNMP
 
-A reactive, non-blocking, SNMP library.
+A reactive, non-blocking SNMP library for Java and Scala that focusses on mass throughput with low latency. Blaze is currently a work in progress, based on the new Akka (2.2) IO library. 
 Created by Scott Abernethy (github @scott-abernethy).
 
 ## License

@@ -8,7 +8,7 @@ Blaze consists of:
 
 Created by Scott Abernethy (github @scott-abernethy).
 
-## Current state 
+### Current state 
 
 Blaze implements the SNMP protocol on top of the new Akka v2.2 IO library.
 
@@ -26,7 +26,7 @@ val sysName = ObjectIdentifier(Seq(1,3,6,1,2,1,1,5,0))
 val response: Future[GetResponse] = service.getRequest(Target(address, community), List(sysUpTime, sysName)) 
 ```
 
-## Roadmap for future development
+### Roadmap for future development
 
 TBD.
 

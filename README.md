@@ -15,15 +15,35 @@ Blaze implements the SNMP protocol on top of the new Akka v2.2 IO library.
 Supported operations:
 - SNMP Get. 
 
-```scala
-val service = new SnmpServiceImpl(ActorSystem("blaze"))
+#### Basic Example
 
+Here is a basic example in Scala. First some setup.
+
+```scala
+val system = ActorSystem("blaze")
+
+// An SNMPv2 target
 val address = new InetSocketAddress("192.168.1.1", 161)
 val community = "public"
+
+// Some SNMP object identifiers to request
 val sysUpTime = ObjectIdentifier(Seq(1,3,6,1,2,1,1,3,0))
 val sysName = ObjectIdentifier(Seq(1,3,6,1,2,1,1,5,0))
+```
 
-val response: Future[GetResponse] = service.getRequest(Target(address, community), List(sysUpTime, sysName)) 
+Option 1: Simple service wrapper using Futures
+
+```scala
+val service = new SnmpServiceImpl(system)
+val response: Future[GetResponse] = service.getRequest(Target(address, community), List(sysUpTime, sysName))
+```
+
+Option 2: Using base Actor
+
+```scala
+val handler = system.actorOf(Props[RequestHandler], "RequestHandler")
+handler ! GetRequest(Target(address, community), List(sysUpTime, sysName))
+// ... RequestHadler will reply with GetResponse
 ```
 
 ### Roadmap for future development

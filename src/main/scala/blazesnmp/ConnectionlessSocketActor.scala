@@ -16,17 +16,19 @@
 
 package blazesnmp
 
-import akka.actor.{UnhandledMessage, ActorKilledException, ActorRef, Actor}
+import akka.actor._
 import akka.event.Logging
-import akka.io.{UdpFF, IO}
-import akka.io.UdpFF._
+import akka.io.{Udp, IO}
+import akka.io.Udp._
 import akka.util.ByteString
 import java.net.{InetAddress, InetSocketAddress}
 import java.util.concurrent.atomic.AtomicInteger
-import collection.immutable.Queue
-import akka.io.UdpFF.Received
-import akka.io.UdpFF.Bind
 import scala.concurrent.duration.FiniteDuration
+import akka.io.Udp.Received
+import akka.io.Udp.CommandFailed
+import scala.Some
+import akka.io.Udp.Bind
+import akka.io.Udp.Bound
 
 case class RequestPayload(payload: ByteString, to: InetSocketAddress)
 case class ResponsePayload(payload: ByteString)
@@ -46,35 +48,38 @@ class ConnectionlessSocketActor extends Actor {
     super.preStart()
     val localAddress = new InetSocketAddress(ConnectionlessSocketActor.nextPort.incrementAndGet())
 //    val localAddress = new InetSocketAddress(InetAddress.getByName("10.16.104.8"), ConnectionlessSocketActor.nextPort.incrementAndGet())
-    log.debug("Binding to {}", localAddress)
+    log.debug("Socket {} binding to {}", self, localAddress)
     implicit val actorSystem = context.system
-    IO(UdpFF) ! Bind(self, localAddress)
+    IO(Udp) ! Bind(self, localAddress)
     context.system.scheduler.schedule(FiniteDuration(5, "seconds"), FiniteDuration(5, "seconds"), self, 'Drain)(context.dispatcher)
   }
 
   override def postStop() {
     super.postStop()
     implicit val actorSystem = context.system
-    IO(UdpFF) ! Unbind
+    IO(Udp) ! Unbind
   }
 
   def receive = {
-    case Bound => {
-      log.debug("Bound on {}", sender)
-      conn = Some(sender)
+    case Bound(local) => {
+      val ref = sender
+      conn = Some(ref)
+      log.debug("Bound on {}", conn)
     }
     case RequestPayload(payload, target) => {
       val msg = Send(payload, target, WantAck)
       if (out < MaxOut && conn.isDefined) {
+        log.debug("Sending   payload {} for {}", payload, target)
         conn.foreach(_ ! msg)
         out = out + 1
       }
       else {
+        log.debug("Buffering payload {} for {} ... conn is {}", payload, target, conn)
         buffer = msg +: buffer
       }
     }
     case CommandFailed(msg: Send) => {
-      log.info("Command failed, resending...")
+      log.debug("Command failed, resending...")
       out = out - 1
       drain()
       buffer = msg +: buffer
@@ -103,8 +108,9 @@ class ConnectionlessSocketActor extends Actor {
     }
   }
 
-  def responseHandler(from: InetSocketAddress): ActorRef = {
-    context.system.actorFor("/user/RequestHandler/" + SocketHandler.name(from))
+  def responseHandler(from: InetSocketAddress): ActorSelection = {
+    // Todo cache? And or cache the underlying actor?
+    context.system.actorSelection("/user/RequestHandler/" + SocketHandler.name(from))
   }
 }
 

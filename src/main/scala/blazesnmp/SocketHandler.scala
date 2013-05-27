@@ -60,6 +60,7 @@ class SocketHandler extends Actor with TargetState {
       waitOn(requestId, respondTo, msg, System.currentTimeMillis)
     }
     case ResponsePayload(data) => {
+      log.debug("Receiving {}", data)
       //val start = System.currentTimeMillis
       val decoded = BerDecode.getTlv(data.iterator)
       decoded match {

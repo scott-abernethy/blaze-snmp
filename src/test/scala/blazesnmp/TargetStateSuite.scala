@@ -18,11 +18,10 @@ package blazesnmp
 
 import akka.actor.ActorSystem
 import akka.testkit.TestProbe
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest._
 import akka.util.ByteString
 
-class TargetStateSuite extends FunSuite with ShouldMatchers {
+class TargetStateSuite extends FunSuite with Matchers {
   test("next request id") {
     val x = new TargetState{}
     x.nextId should equal(1)

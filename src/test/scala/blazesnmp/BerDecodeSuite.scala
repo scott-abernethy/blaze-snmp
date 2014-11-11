@@ -17,10 +17,9 @@
 package blazesnmp
 
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
 import akka.util.ByteString
 
-class BerDecodeSuite extends FunSuite with ShouldMatchers {
+class BerDecodeSuite extends FunSuite with Matchers {
 
   implicit val byteOrder = java.nio.ByteOrder.BIG_ENDIAN
 

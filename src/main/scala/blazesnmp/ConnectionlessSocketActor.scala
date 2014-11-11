@@ -118,5 +118,5 @@ object ConnectionlessSocketActor {
   val nextPort = new AtomicInteger(9162)
 }
 
-case object WantAck {
+case object WantAck extends Event {
 }

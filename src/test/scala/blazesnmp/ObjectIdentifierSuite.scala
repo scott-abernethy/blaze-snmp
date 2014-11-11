@@ -16,10 +16,9 @@
 
 package blazesnmp
 
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
+import org.scalatest._
 
-class ObjectIdentifierSuite extends FunSuite with ShouldMatchers {
+class ObjectIdentifierSuite extends FunSuite with Matchers {
   test("create from string") {
     ObjectIdentifier.create("1.3.1.6.2509.8.0").toSeq should equal(List(1,3,1,6,2509,8,0))
     ObjectIdentifier.create(".1.3.1.6.2509.8.0").toSeq should equal(List(1,3,1,6,2509,8,0))

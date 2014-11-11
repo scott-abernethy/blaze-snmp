@@ -17,11 +17,10 @@
 package blazesnmp
 
 import org.scalatest._
-import org.scalatest.matchers.ShouldMatchers
 import BerEncode._
 import akka.util.ByteString
 
-class BerEncodeSuite extends FunSuite with ShouldMatchers {
+class BerEncodeSuite extends FunSuite with Matchers {
 
   /* This encoding is always used if the encoding is primitive or the encoding is constructed and data is immediately available. Depending on the actual length of the content the length octets are encoded using either a short form or a long form. Both forms store numeric data as unsigned binary integers in big-endian encoding.
 In the short form, the length octets consist of a single octet in which 

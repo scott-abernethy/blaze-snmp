@@ -2,12 +2,12 @@ name := "blaze"
 
 version := "0.1.0"
 
-scalaVersion := "2.10.1"
+scalaVersion := "2.11.4"
 
-resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
- 
 libraryDependencies ++= Seq(
-  "com.typesafe.akka" %% "akka-actor" % "2.2-M3",
-  "com.typesafe.akka" %% "akka-testkit" % "2.2-M3" % "test",
-  "org.scalatest" %% "scalatest" % "1.9.1" % "test"
+  "com.typesafe.akka" %% "akka-actor" % "2.3.6",
+  "com.typesafe.akka" %% "akka-testkit" % "2.3.6" % "test",
+  "org.scalatest" %% "scalatest" % "2.2.1" % "test"
 )
+
+scalacOptions ++= Seq("-feature", "-unchecked", "-deprecation", "-language:implicitConversions", "-language:postfixOps")
